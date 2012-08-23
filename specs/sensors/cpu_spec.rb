@@ -63,6 +63,37 @@ def second_hash
 
 end
 
+def stats_hash
+  {
+    "cpu" => {
+                user:        33.33,
+                nice:        0.0,
+                system:      16.67,
+                idle:        50.0,
+                iowait:      0.0,
+                irq:         0.0,
+                soft_irq:    0.0,
+                steal:       0.0,
+                guest:       0.0,
+                niceguest:   0.0,
+                usage:       50.0
+              },
+    "cpu0" => {
+                user:        33.33,
+                nice:        0.0,
+                system:      16.67,
+                idle:        50.0,
+                iowait:      0.0,
+                irq:         0.0,
+                soft_irq:    0.0,
+                steal:       0.0,
+                guest:       0.0,
+                niceguest:   0.0,
+                usage:       50.0
+              }
+  }
+
+end
 describe Sensors::CPU do
 
   describe "When on linux" do
@@ -81,8 +112,9 @@ describe Sensors::CPU do
 
     describe "when polling" do
       before(:each) do
-        @correct_first_hash = first_hash
+        @correct_first_hash  = first_hash
         @correct_second_hash = second_hash
+        @correct_stats_hash  = stats_hash
         @first_snapshot  = IO.readlines( "specs/fixtures/proc_stat_1_cpu_snapshot01" )
         @second_snapshot = IO.readlines( "specs/fixtures/proc_stat_1_cpu_snapshot02" )
         Sensors::CPU.send(:define_method,"get_current_time") { Time.at(0) }
@@ -109,7 +141,7 @@ describe Sensors::CPU do
 
       it "sets up the next poll correctly" do
         stub_read_proc_stat
-        
+
         @cpu_poller.instance_variable_get("@first_poll").must_equal true 
         @cpu_poller.instance_variable_get("@last_cpu_times").must_be_empty
         @cpu_poller.instance_variable_get("@poll_time").must_equal Time.at(0)
@@ -128,6 +160,19 @@ describe Sensors::CPU do
         @cpu_poller.instance_variable_get("@cpu_times").must_equal @correct_second_hash
         @cpu_poller.instance_variable_get("@last_poll_time").must_equal Time.at(0)
         @cpu_poller.instance_variable_get("@poll_time").must_equal Time.at(5)
+      end
+
+      it "does a differential poll" do
+        @cpu_clone = @cpu_poller.clone
+        stub_read_proc_stat
+        poller_thread  = Thread.new { @cpu_poller.polling_mode = :double; @cpu_poller.poll(5) }
+        stubber_thread = Thread.new { @cpu_poller.class.send(:define_method,"get_current_time") { Time.now + 5 };
+                                     stub_read_proc_stat(1,2)}
+
+        poller_thread.join
+        stubber_thread.join
+        @cpu_poller.instance_variable_get("@cpu_stats").must_equal @correct_stats_hash
+        @cpu_poller = @cpu_clone
       end
     end
     
